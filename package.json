@@ -1,0 +1,45 @@
+{
+  "name": "acg-command-center",
+  "version": "0.1.0",
+  "description": "Centro de Comando ACG — Plataforma de Inteligencia Publicitaria Autónoma",
+  "private": true,
+  "scripts": {
+    "dev": "npx concurrently \"npm run api:dev\" \"npm run dashboard:dev\"",
+    "api:dev": "tsx server/local-api.ts",
+    "ingest:twilio": "tsx ingestion/twilio-local.ts",
+    "ingest:twilio:supabase": "tsx ingestion/twilio.ts",
+    "ingest:twilio:full": "tsx ingestion/twilio-full.ts",
+    "ingest:crm": "tsx ingestion/crm.ts",
+    "ingest:google-ads": "tsx ingestion/google-ads.ts",
+    "ingest:google-ads-csv": "tsx ingestion/import-google-ads-csv.ts",
+    "ingest:all": "tsx ingestion/run-all.ts",
+    "resolve:identities": "tsx agents/identity-resolver.ts",
+    "compute:metrics": "tsx agents/metrics.ts",
+    "briefing": "tsx agents/briefing.ts",
+    "dashboard:dev": "cd dashboard && npx vite --host 0.0.0.0 --port 5173",
+    "dashboard:build": "cd dashboard && npx vite build",
+    "generate:numbers": "tsx scripts/generate-number-registry.ts",
+    "setup:db": "tsx scripts/setup-db.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.50.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "better-sqlite3": "^12.10.0",
+    "cors": "^2.8.6",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "p-limit": "^6.2.0",
+    "pg": "^8.21.0",
+    "twilio": "^5.4.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

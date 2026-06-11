@@ -1,0 +1,47 @@
+# Credentials & secrets
+.env
+credentials.json
+*.cred.json
+
+# Database files
+dev.db
+dev.db-shm
+dev.db-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Build artifacts
+dashboard/dist/
+
+# PM2
+ecosystem.config.js
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Large exports
+exports/
+
+# Crash Intel — large data files (CSVs > 10MB)
+crash-intel/data/ACCIDENTS\ DATA/
+crash-intel/data/dmv_vehicles_*.csv
+crash-intel/data/cdi/*.xlsx
