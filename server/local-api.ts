@@ -706,16 +706,20 @@ app.get('/api/recordings/:callSid', async (req, res) => {
     const recRes = await fetch(recUrl, { headers: { 'Authorization': `Basic ${auth}` } });
     const recData = await recRes.json();
 
-    // Helper: stream MP3 through server (Twilio requires auth, browser can't do it directly)
+    // Helper: stream MP3 directly via pipe (no buffering)
     async function streamRecording(recordingSid: string) {
       const mp3Url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
       const mp3Res = await fetch(mp3Url, { headers: { 'Authorization': `Basic ${auth}` } });
-      if (!mp3Res.ok) return false;
+      if (!mp3Res.ok || !mp3Res.body) return false;
       res.setHeader('Content-Type', 'audio/mpeg');
-      res.setHeader('Content-Length', mp3Res.headers.get('content-length') || '');
       res.setHeader('Accept-Ranges', 'bytes');
-      const buffer = await mp3Res.arrayBuffer();
-      res.send(Buffer.from(buffer));
+      const { Readable } = await import('stream');
+      const nodeStream = Readable.fromWeb(mp3Res.body as any);
+      nodeStream.pipe(res);
+      await new Promise((resolve, reject) => {
+        nodeStream.on('end', resolve);
+        nodeStream.on('error', reject);
+      });
       return true;
     }
 
