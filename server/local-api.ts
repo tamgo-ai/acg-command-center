@@ -693,34 +693,46 @@ app.get('/api/recordings/:callSid', async (req, res) => {
     const { callSid } = req.params;
     const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
     const authToken = process.env.TWILIO_AUTH_TOKEN || '';
-
-    // Buscar recordings para este call
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings.json?CallSid=${callSid}`;
     const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
 
-    const twilioRes = await fetch(twilioUrl, {
-      headers: { 'Authorization': `Basic ${auth}` }
-    });
-    const data = await twilioRes.json();
+    // 1. Buscar el call para ver si tiene parent_call_sid (grabaciones viven en el parent)
+    const callUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`;
+    const callRes = await fetch(callUrl, { headers: { 'Authorization': `Basic ${auth}` } });
+    const callData = await callRes.json();
+    const parentSid = callData.parent_call_sid || callSid;
 
-    if (data.recordings && data.recordings.length > 0) {
-      const rec = data.recordings[0];
-      // Redirect to the MP3 with auth
-      const mp3Url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${rec.sid}.mp3`;
-      res.redirect(mp3Url);
+    // 2. Buscar recordings en el parent call
+    const recUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${parentSid}/Recordings.json`;
+    const recRes = await fetch(recUrl, { headers: { 'Authorization': `Basic ${auth}` } });
+    const recData = await recRes.json();
+
+    // Helper: stream MP3 through server (Twilio requires auth, browser can't do it directly)
+    async function streamRecording(recordingSid: string) {
+      const mp3Url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
+      const mp3Res = await fetch(mp3Url, { headers: { 'Authorization': `Basic ${auth}` } });
+      if (!mp3Res.ok) return false;
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', mp3Res.headers.get('content-length') || '');
+      res.setHeader('Accept-Ranges', 'bytes');
+      const buffer = await mp3Res.arrayBuffer();
+      res.send(Buffer.from(buffer));
+      return true;
+    }
+
+    if (recData.recordings && recData.recordings.length > 0) {
+      const best = recData.recordings.sort((a: any, b: any) => parseInt(b.duration || '0') - parseInt(a.duration || '0'))[0];
+      const ok = await streamRecording(best.sid);
+      if (!ok) res.status(500).json({ error: 'Failed to fetch MP3' });
     } else {
-      // Try without .json (alternate API format)
-      const twilioUrl2 = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}/Recordings.json`;
-      const twilioRes2 = await fetch(twilioUrl2, {
-        headers: { 'Authorization': `Basic ${auth}` }
-      });
-      const data2 = await twilioRes2.json();
-      if (data2.recordings && data2.recordings.length > 0) {
-        const rec = data2.recordings[0];
-        const mp3Url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${rec.sid}.mp3`;
-        res.redirect(mp3Url);
+      const recUrl2 = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}/Recordings.json`;
+      const recRes2 = await fetch(recUrl2, { headers: { 'Authorization': `Basic ${auth}` } });
+      const recData2 = await recRes2.json();
+      if (recData2.recordings && recData2.recordings.length > 0) {
+        const best = recData2.recordings.sort((a: any, b: any) => parseInt(b.duration || '0') - parseInt(a.duration || '0'))[0];
+        const ok = await streamRecording(best.sid);
+        if (!ok) res.status(500).json({ error: 'Failed to fetch MP3' });
       } else {
-        res.status(404).json({ error: 'No recording found', callSid });
+        res.status(404).json({ error: 'No recording found', callSid, parentSid });
       }
     }
   } catch (err: any) {
