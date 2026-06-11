@@ -82,7 +82,7 @@ export default function AttributionOverview({ days }: Props) {
           { label: 'Journeys', value: overview?.total_journeys?.toLocaleString() || '0', icon: BarChart3, color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.15)' },
           { label: 'Atribución', value: `${overview?.attribution_rate || 0}%`, icon: Target, color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.15)' },
           { label: 'Ad Spend', value: formatCurrency(overview?.total_spend || 0), icon: DollarSign, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.15)' },
-          { label: 'Drop Rate', value: `${overview?.drop_rate || 0}%`, icon: TrendingUp, color: overview && overview.drop_rate > 25 ? '#ef4444' : '#f59e0b', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.15)' },
+          { label: 'Conversión', value: `${overview?.drop_rate || 0}%`, icon: TrendingUp, color: overview && overview.drop_rate > 30 ? '#10b981' : overview && overview.drop_rate > 15 ? '#f59e0b' : '#ef4444', bg: overview && overview.drop_rate > 30 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', border: overview && overview.drop_rate > 30 ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' },
           { label: 'Canales', value: String(overview?.channels_detected || 0), icon: Radio, color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)', border: 'rgba(139,92,246,0.15)' },
           { label: 'Cost/Drop', value: `$${overview?.cost_per_drop || '0'}`, icon: Percent, color: '#06b6d4', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.15)' },
         ].map(({ label, value, icon: Icon, color, bg, border }) => (
@@ -113,7 +113,7 @@ export default function AttributionOverview({ days }: Props) {
                     <span className="font-medium capitalize" style={{ color: '#d0d0e0' }}>{ch.channel.replace(/_/g, ' ')}</span>
                     <span className="font-mono" style={{ color: '#8a8aa0' }}>
                       {ch.journeys} leads · {ch.drop_offs} drops ·
-                      <span style={{ color: ch.drop_rate > 30 ? '#ef4444' : ch.drop_rate > 15 ? '#f59e0b' : '#10b981' }}> {ch.drop_rate}%</span>
+                      <span style={{ color: ch.drop_rate > 35 ? '#10b981' : ch.drop_rate > 15 ? '#f59e0b' : '#ef4444' }}> {ch.drop_rate}%</span>
                     </span>
                   </div>
                   <div className="h-5 rounded-md overflow-hidden flex" style={{ background: 'rgba(255,255,255,0.03)' }}>
@@ -168,7 +168,7 @@ export default function AttributionOverview({ days }: Props) {
                 className="px-2.5 py-1 rounded-md text-[10px] font-medium transition-all"
                 style={sortKey === k ? { background: 'rgba(59,130,246,0.15)', color: '#3b82f6' } : { color: '#6a6a80' }}
               >
-                {k === 'journeys' ? 'Volumen' : k === 'drop_rate' ? '% Drop' : '$/Drop'}
+                {k === 'journeys' ? 'Volumen' : k === 'drop_rate' ? '% Conv' : '$/Drop'}
               </button>
             ))}
           </div>
@@ -177,7 +177,7 @@ export default function AttributionOverview({ days }: Props) {
           <table className="w-full text-xs">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                {['Location', 'Journeys', 'Drops', 'Drop Rate', 'Calls', 'Spend', 'Cost/Drop'].map(h => (
+                {['Location', 'Journeys', 'Drops', 'Conv %', 'Calls', 'Spend', 'Cost/Drop'].map(h => (
                   <th key={h} className="text-left py-2 px-3 font-medium uppercase tracking-wider" style={{ color: '#6a6a80' }}>{h}</th>
                 ))}
               </tr>
@@ -196,9 +196,9 @@ export default function AttributionOverview({ days }: Props) {
                   <td className="py-2.5 px-3 font-mono" style={{ color: '#d0d0e0' }}>{loc.journeys}</td>
                   <td className="py-2.5 px-3 font-mono font-medium" style={{ color: '#e8e8f0' }}>{loc.drop_offs}</td>
                   <td className="py-2.5 px-3 font-mono">
-                    <span style={{ color: loc.drop_rate > 30 ? '#ef4444' : loc.drop_rate > 20 ? '#f59e0b' : '#10b981' }}>
+                    <span style={{ color: loc.drop_rate > 35 ? '#10b981' : loc.drop_rate > 20 ? '#f59e0b' : '#ef4444' }}>
                       {loc.drop_rate}%
-                      {loc.drop_rate > 30 ? <ArrowDownRight className="inline w-3 h-3 ml-0.5" /> : <ArrowUpRight className="inline w-3 h-3 ml-0.5" />}
+                      {loc.drop_rate > 35 ? <ArrowUpRight className="inline w-3 h-3 ml-0.5" /> : loc.drop_rate < 20 ? <ArrowDownRight className="inline w-3 h-3 ml-0.5" /> : null}
                     </span>
                   </td>
                   <td className="py-2.5 px-3 font-mono" style={{ color: '#8a8aa0' }}>{loc.total_calls}</td>

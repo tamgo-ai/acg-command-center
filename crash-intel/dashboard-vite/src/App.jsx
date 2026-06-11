@@ -2024,26 +2024,37 @@ function RevenueRadar() {
 
         {/* Reputation */}
         <div className="rounded-xl border border-blue-500/10 bg-blue-500/[0.03] p-4">
-          <h4 className="text-[10px] font-semibold text-blue-400 uppercase mb-2">⭐ Reputation vs Competitors</h4>
-          <div className="grid grid-cols-2 gap-3 text-center">
-            <div>
-              <div className="text-2xl font-bold text-white">{selectedLoc.reputation.google_rating}★</div>
-              <div className="text-[8px] text-slate-500 mt-0.5">ACG ({selectedLoc.reputation.google_reviews} reviews)</div>
+          <h4 className="text-[10px] font-semibold text-blue-400 uppercase mb-2">⭐ Reputation (Bayesian Weighted)</h4>
+          <div className="grid grid-cols-2 gap-3 text-center mb-3">
+            <div className="rounded-lg bg-white/[0.02] p-2">
+              <div className="text-xl font-bold text-white">{selectedLoc.reputation.google_rating}★</div>
+              <div className="text-[8px] text-slate-500">ACG ({selectedLoc.reputation.google_reviews} reviews)</div>
+              <div className="text-[9px] font-bold text-blue-400 mt-0.5">{selectedLoc.reputation.bayesian_rating || selectedLoc.reputation.google_rating}</div>
+              <div className="text-[7px] text-slate-600">Bayesian weighted</div>
             </div>
-            <div>
-              <div className="text-2xl font-bold text-slate-400">{selectedLoc.reputation.competitor_avg_rating}★</div>
-              <div className="text-[8px] text-slate-500 mt-0.5">Competitor Avg</div>
+            <div className="rounded-lg bg-white/[0.02] p-2">
+              <div className="text-xl font-bold text-slate-400">{selectedLoc.reputation.competitor_avg_rating}★</div>
+              <div className="text-[8px] text-slate-500">Competitor Avg</div>
+              <div className="text-[9px] font-bold text-slate-400 mt-0.5">{selectedLoc.reputation.bayesian_competitor || selectedLoc.reputation.competitor_avg_rating}</div>
+              <div className="text-[7px] text-slate-600">Bayesian weighted</div>
             </div>
           </div>
-          <div className="mt-3 space-y-1 text-[10px]">
+          <div className="space-y-1 text-[10px]">
             <div className="flex justify-between">
               <span className="text-slate-500">Gap vs Competitors</span>
               <span className={`font-bold ${
                 selectedLoc.reputation.status_vs_competitors === 'ABOVE' ? 'text-emerald-400' :
                 selectedLoc.reputation.status_vs_competitors === 'BELOW' ? 'text-red-400' : 'text-amber-400'
               }`}>
-                {selectedLoc.reputation.gap_vs_competitors > 0 ? '+' : ''}{selectedLoc.reputation.gap_vs_competitors.toFixed(1)}★
+                {selectedLoc.reputation.gap_vs_competitors > 0 ? '+' : ''}{selectedLoc.reputation.gap_vs_competitors?.toFixed(2)}★ Bayesian
               </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Credibility</span>
+              <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded-full ${
+                selectedLoc.reputation.credibility === 'HIGH' ? 'bg-emerald-500/10 text-emerald-400' :
+                selectedLoc.reputation.credibility === 'MEDIUM' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'
+              }`}>{selectedLoc.reputation.credibility || 'MEDIUM'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Best Competitor</span>

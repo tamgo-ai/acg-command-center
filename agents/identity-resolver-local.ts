@@ -77,8 +77,9 @@ async function main() {
   let unattributed = 0;
   let skipped = 0;
 
-  const upsertJourney = db.prepare(`
-    INSERT OR REPLACE INTO customer_journey
+  const deleteOld = db.prepare(`DELETE FROM customer_journey WHERE appointment_id = ?`);
+  const insertJourney = db.prepare(`
+    INSERT INTO customer_journey
       (customer_phone, normalized_phone, attributed_channel, attributed_location,
        first_touch_at, last_touch_at, appointment_id, drop_off, drop_off_at,
        attribution_method, confidence, touchpoints, lookback_days)
@@ -182,7 +183,8 @@ async function main() {
       const firstTouch = touchpoints.length > 0 ? touchpoints[touchpoints.length - 1].occurred_at : appt.scheduled_at || new Date().toISOString();
       const lastTouch = touchpoints.length > 0 ? touchpoints[0].occurred_at : appt.scheduled_at || new Date().toISOString();
 
-      upsertJourney.run(
+      deleteOld.run(appt.appointment_id);
+      insertJourney.run(
         phone,
         phone,
         attributedChannel,

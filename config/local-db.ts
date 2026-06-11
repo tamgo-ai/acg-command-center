@@ -149,6 +149,8 @@ export function getLocalDb(): Database.Database {
       PRIMARY KEY (metric_name, location_id, channel, period_start, period_end)
     );
 
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_journey_appt_unique ON customer_journey(appointment_id);
+
     CREATE TABLE IF NOT EXISTS ad_spend (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       channel TEXT NOT NULL,

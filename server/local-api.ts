@@ -515,7 +515,8 @@ app.get('/api/attribution/channels', (req, res) => {
     WHERE last_touch_at > ${since}
     GROUP BY attributed_channel
     HAVING journeys >= 3
-    ORDER BY journeys DESC
+    ORDER BY
+      CASE WHEN attributed_channel IS NULL THEN 999 ELSE journeys END DESC
   `).all() as any[];
 
   // Merge spend per channel
