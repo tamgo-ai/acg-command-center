@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { AttributionOverview as AO, ChannelPerformance as CP, LocationLeader as LL, SourceGroup } from '../api';
-import { BarChart3, TrendingUp, DollarSign, Target, Radio, Percent, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 interface Props {
   days: number;
@@ -76,27 +76,6 @@ export default function AttributionOverview({ days }: Props) {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
-        {[
-          { label: 'Journeys', value: overview?.total_journeys?.toLocaleString() || '0', icon: BarChart3, color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.15)' },
-          { label: 'Atribución', value: `${overview?.attribution_rate || 0}%`, icon: Target, color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.15)' },
-          { label: 'Ad Spend', value: formatCurrency(overview?.total_spend || 0), icon: DollarSign, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.15)' },
-          { label: 'Conversión', value: `${overview?.drop_rate || 0}%`, icon: TrendingUp, color: overview && overview.drop_rate > 30 ? '#10b981' : overview && overview.drop_rate > 15 ? '#f59e0b' : '#ef4444', bg: overview && overview.drop_rate > 30 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', border: overview && overview.drop_rate > 30 ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' },
-          { label: 'Canales', value: String(overview?.channels_detected || 0), icon: Radio, color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)', border: 'rgba(139,92,246,0.15)' },
-          { label: 'Cost/Drop', value: `$${overview?.cost_per_drop || '0'}`, icon: Percent, color: '#06b6d4', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.15)' },
-        ].map(({ label, value, icon: Icon, color, bg, border }) => (
-          <div key={label} className="rounded-xl p-3.5 relative overflow-hidden transition-all duration-300 hover:scale-[1.02]" style={{ background: bg, border: `1px solid ${border}`, backdropFilter: 'blur(20px)' }}>
-            <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: `linear-gradient(90deg, ${color}, transparent)` }} />
-            <div className="flex items-center gap-2 mb-1.5">
-              <Icon className="w-3.5 h-3.5" style={{ color }} />
-              <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: '#8a8aa0' }}>{label}</span>
-            </div>
-            <div className="text-xl font-bold font-mono" style={{ color: '#e8e8f0' }}>{value}</div>
-          </div>
-        ))}
-      </div>
-
       {/* Two-column layout: Channel Performance | Source Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Channel Performance */}
