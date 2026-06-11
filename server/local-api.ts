@@ -687,6 +687,47 @@ app.use('/crash-intel/api', async (req, res) => {
 // Serve crash-intel dashboard build
 app.use('/crash-intel', express.static('/root/acg-command-center/crash-intel/dashboard-vite/dist'));
 
+// ── GET /api/recordings/:callSid — Proxy de grabaciones Twilio ──
+app.get('/api/recordings/:callSid', async (req, res) => {
+  try {
+    const { callSid } = req.params;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
+    const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+
+    // Buscar recordings para este call
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings.json?CallSid=${callSid}`;
+    const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+
+    const twilioRes = await fetch(twilioUrl, {
+      headers: { 'Authorization': `Basic ${auth}` }
+    });
+    const data = await twilioRes.json();
+
+    if (data.recordings && data.recordings.length > 0) {
+      const rec = data.recordings[0];
+      // Redirect to the MP3 with auth
+      const mp3Url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${rec.sid}.mp3`;
+      res.redirect(mp3Url);
+    } else {
+      // Try without .json (alternate API format)
+      const twilioUrl2 = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}/Recordings.json`;
+      const twilioRes2 = await fetch(twilioUrl2, {
+        headers: { 'Authorization': `Basic ${auth}` }
+      });
+      const data2 = await twilioRes2.json();
+      if (data2.recordings && data2.recordings.length > 0) {
+        const rec = data2.recordings[0];
+        const mp3Url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${rec.sid}.mp3`;
+        res.redirect(mp3Url);
+      } else {
+        res.status(404).json({ error: 'No recording found', callSid });
+      }
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Start ────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🔌 ACG Command Center Local API → http://0.0.0.0:${PORT}`);
