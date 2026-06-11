@@ -39,7 +39,10 @@ function App() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [stats, setStats] = useState<LocationChannelStat[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [kpis, setKpis] = useState<{ calls: number; msgs: number; spend: number; drops: number }>({ calls: 0, msgs: 0, spend: 0, drops: 0 });
+  const [kpis, setKpis] = useState<{
+    journeys: number; attrRate: number; spend: number; dropRate: number; drops: number; costDrop: number;
+    calls: number; msgs: number;
+  }>({ journeys: 0, attrRate: 0, spend: 0, dropRate: 0, drops: 0, costDrop: 0, calls: 0, msgs: 0 });
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isLocal, setIsLocal] = useState(true);
@@ -52,10 +55,11 @@ function App() {
     try {
       setIsLocal(api.isLocal);
 
-      const [recs, heatmap, locs] = await Promise.all([
+      const [recs, heatmap, locs, attrOverview] = await Promise.all([
         api.getRecommendations(),
         api.getHeatmap(d),
         api.getLocations(),
+        api.getAttributionOverview(d),
       ]);
 
       setRecommendations(recs);
@@ -80,21 +84,22 @@ function App() {
       });
       setStats(statsArr);
 
-      // KPI data from stats endpoint (respects days filter)
+      // Unified KPIs from attribution overview (single source of truth)
       try {
         const statsRes = await fetch(`/api/stats?days=${d}`);
         const statsData = await statsRes.json();
-        const spendRes = await fetch(`/api/ad-spend?days=${d}`);
-        const spendData = await spendRes.json();
-        const totalSpend = (spendData || []).reduce((s: number, r: any) => s + (r.total_spend || 0), 0);
         setKpis({
+          journeys: attrOverview.total_journeys,
+          attrRate: attrOverview.attribution_rate,
+          spend: attrOverview.total_spend,
+          dropRate: attrOverview.drop_rate,
+          drops: statsData.drop_offs || 0,
+          costDrop: Number(attrOverview.cost_per_drop) || 0,
           calls: totalCalls,
           msgs: statsData.total_messages || 0,
-          spend: totalSpend,
-          drops: statsData.drop_offs || 0,
         });
       } catch {
-        setKpis({ calls: totalCalls, msgs: 0, spend: 0, drops: 0 });
+        setKpis({ journeys: 0, attrRate: 0, spend: 0, dropRate: 0, drops: 0, costDrop: 0, calls: 0, msgs: 0 });
       }
 
       setLastUpdate(new Date());
@@ -136,12 +141,14 @@ function App() {
           period={period} periods={PERIODS} onPeriodChange={setPeriod} />
 
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* KPI Bar */}
-          <div className="grid grid-cols-4 gap-4">
-            <KpiCard label="Llamadas Totales" value={kpis.calls.toLocaleString()} icon="📞" delay={0} />
-            <KpiCard label="Mensajes" value={kpis.msgs.toLocaleString()} icon="💬" delay={0.1} />
-            <KpiCard label="Ad Spend" value={`$${kpis.spend.toLocaleString()}`} icon="💰" delay={0.2} />
-            <KpiCard label="Drop Offs" value={kpis.drops.toLocaleString()} icon="🚗" delay={0.3} />
+          {/* KPI Bar — Unified from customer_journey */}
+          <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+            <KpiCard label="Journeys" value={kpis.journeys.toLocaleString()} icon="🔑" delay={0} color="#3b82f6" />
+            <KpiCard label="Atribución" value={`${kpis.attrRate}%`} icon="🎯" delay={0.05} color="#10b981" />
+            <KpiCard label="Ad Spend" value={`$${Number(kpis.spend).toLocaleString()}`} icon="💰" delay={0.1} color="#f59e0b" />
+            <KpiCard label="Conversión" value={`${kpis.dropRate}%`} icon="📈" delay={0.15} color={kpis.dropRate > 30 ? '#10b981' : '#ef4444'} />
+            <KpiCard label="Drop Offs" value={kpis.drops.toLocaleString()} icon="🚗" delay={0.2} color="#8b5cf6" />
+            <KpiCard label="Cost/Drop" value={`$${Number(kpis.costDrop).toLocaleString()}`} icon="💎" delay={0.25} color="#06b6d4" />
           </div>
 
           {/* Content Area */}
@@ -175,18 +182,15 @@ function App() {
   );
 }
 
-function KpiCard({ label, value, icon, delay }: { label: string; value: string; icon: string; delay: number }) {
+function KpiCard({ label, value, icon, delay, color }: { label: string; value: string; icon: string; delay: number; color: string }) {
   return (
-    <div className="kpi-card count-in" style={{ animationDelay: `${delay}s` }}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-[#8a8aa0] uppercase tracking-wider">{label}</span>
-        <span className="text-lg">{icon}</span>
+    <div className="kpi-card count-in rounded-xl p-3.5 relative overflow-hidden transition-all duration-300 hover:scale-[1.02]" style={{ animationDelay: `${delay}s`, background: `${color}11`, border: `1px solid ${color}22` }}>
+      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: `linear-gradient(90deg, ${color}, transparent)` }} />
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a8aa0]">{label}</span>
+        <span className="text-sm">{icon}</span>
       </div>
-      <div className="kpi-value text-[2rem]">{value}</div>
-      <div className="flex items-center gap-2 mt-2">
-        <span className="live-pulse" />
-        <span className="text-[10px] text-[#8a8aa0] uppercase tracking-wider">Live</span>
-      </div>
+      <div className="text-xl font-bold font-mono text-[#e8e8f0]">{value}</div>
     </div>
   );
 }

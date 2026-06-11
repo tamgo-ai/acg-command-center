@@ -82,6 +82,20 @@ app.get('/api/heatmap', (req, res) => {
     FROM appointments WHERE location_id IS NOT NULL GROUP BY location_id
   `).all() as any[];
 
+  // Real attribution from customer_journey (replaces proportional estimation)
+  const journeys = db.prepare(`
+    SELECT attributed_location as location_id, attributed_channel as channel,
+      COUNT(*) as journey_count,
+      SUM(CASE WHEN drop_off = 1 THEN 1 ELSE 0 END) as real_drops
+    FROM customer_journey
+    WHERE attributed_channel IS NOT NULL
+      AND attributed_location IS NOT NULL AND attributed_location != 'all'
+      AND last_touch_at > ${since}
+    GROUP BY attributed_location, attributed_channel
+  `).all() as any[];
+  const journeyMap: Record<string, any> = {};
+  for (const j of journeys) journeyMap[`${j.location_id}|${j.channel}`] = j;
+
   // Merge spend and drops into data
   // ATRIBUCIÓN PROPORCIONAL: % de calls de un canal → % de drops de ese canal
   const spendMap: Record<string, any> = {};
@@ -98,18 +112,21 @@ app.get('/api/heatmap', (req, res) => {
   const enriched = data.map((row: any) => {
     const d = dropsMap[row.location_id] || {};
     const s = spendMap[`${row.location_id}|${row.channel}`] || {};
+    const j = journeyMap[`${row.location_id}|${row.channel}`] || {};
     const totalLocCalls = callsByLoc[row.location_id] || 1;
-    const callShare = row.call_count / totalLocCalls;
-    const estimatedDrops = Math.round((d.drop_offs || 0) * callShare);
+    const realDrops = j.real_drops || 0;
+    const journeyCount = j.journey_count || 0;
     const hasSpend = (s.total_spend || 0) > 0;
-    const costoPorDrop = (hasSpend && estimatedDrops > 0)
-      ? Math.round(s.total_spend / estimatedDrops) : null;
+    const costoPorDrop = (hasSpend && realDrops > 0)
+      ? Math.round(s.total_spend / realDrops) : null;
     return {
       ...row,
       total_spend: s.total_spend || 0,
       drop_offs: d.drop_offs || 0,
-      estimated_drops: estimatedDrops,
+      estimated_drops: realDrops,                   // real, not estimated
       costo_por_drop_off: costoPorDrop,
+      journeys: journeyCount,
+      conversion_rate: journeyCount > 0 ? Math.round(realDrops / journeyCount * 100) : null,
     };
   });
 

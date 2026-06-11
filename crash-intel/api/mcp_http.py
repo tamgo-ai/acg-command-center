@@ -209,23 +209,63 @@ def _forecast(conn):
 def health():
     return jsonify({"status":"ok","server":"acg-crash-intel","tools":len(TOOLS)})
 
-@app.route('/mcp/sse')
+@app.route('/mcp/sse', methods=['GET', 'POST', 'OPTIONS'])
 def sse():
-    """SSE endpoint for MCP communication"""
-    session_id = request.args.get('session_id', str(uuid.uuid4()))
-    q = queue.Queue()
-    sessions[session_id] = q
+    """SSE endpoint — handles BOTH SSE connect + POST messages (stateless)"""
+    if request.method == 'POST':
+        # Streamable HTTP: handle JSON-RPC via POST with SSE response
+        msg = request.get_json(force=True)
+        msg_id = msg.get('id', 0)
 
+        def generate_responses():
+            if msg.get('method') == 'initialize':
+                resp = {
+                    "jsonrpc": "2.0", "id": msg_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "acg-crash-intel", "version": "1.0.0"}
+                    }
+                }
+                yield f"data: {json.dumps(resp)}\n\n"
+
+            elif msg.get('method') == 'tools/list':
+                resp = {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS}}
+                yield f"data: {json.dumps(resp)}\n\n"
+
+            elif msg.get('method') == 'tools/call':
+                name = msg['params']['name']
+                args = msg['params'].get('arguments', {})
+                try:
+                    result = execute_tool(name, args)
+                    resp = {
+                        "jsonrpc": "2.0", "id": msg_id,
+                        "result": {"content": [{"type": "text", "text": json.dumps(result, indent=2, default=str)}]}
+                    }
+                except Exception as e:
+                    resp = {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32603, "message": str(e)}}
+                yield f"data: {json.dumps(resp)}\n\n"
+
+            elif msg.get('method') == 'notifications/initialized':
+                yield f"data: {json.dumps({'jsonrpc':'2.0','id':msg_id,'result':{}})}\n\n"
+
+            else:
+                yield f"data: {json.dumps({'jsonrpc':'2.0','id':msg_id,'error':{'code':-32601,'message':'Method not found'}})}\n\n"
+
+        resp = Response(generate_responses(), mimetype='text/event-stream')
+        resp.headers['Cache-Control'] = 'no-cache'
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
+        return resp
+
+    # GET: Standard SSE connection
     def generate():
-        # Send endpoint event with session ID
-        yield f"event: endpoint\ndata: /mcp/messages?session_id={session_id}\n\n"
-        # Keep connection alive and forward messages
-        while session_id in sessions:
-            try:
-                msg = q.get(timeout=15)
-                yield f"event: message\ndata: {json.dumps(msg)}\n\n"
-            except queue.Empty:
-                yield ": heartbeat\n\n"
+        yield f"event: endpoint\ndata: /mcp/sse\n\n"
+        import time
+        while True:
+            yield ": heartbeat\n\n"
+            time.sleep(15)
 
     response = Response(generate(), mimetype='text/event-stream')
     response.headers['Cache-Control'] = 'no-cache'
@@ -236,58 +276,14 @@ def sse():
 
 @app.route('/mcp/messages', methods=['POST', 'OPTIONS'])
 def messages():
-    """JSON-RPC message handler — responses go through SSE"""
+    """Legacy message endpoint — redirects to /mcp/sse"""
     if request.method == 'OPTIONS':
         resp = jsonify({})
         resp.headers['Access-Control-Allow-Origin'] = '*'
-        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
         return resp
-
-    session_id = request.args.get('session_id', '')
-    msg = request.get_json(force=True)
-    msg_id = msg.get('id', 0)
-
-    if msg.get('method') == 'initialize':
-        # Initialize goes directly back (handshake)
-        return jsonify({
-            "jsonrpc": "2.0", "id": msg_id,
-            "result": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}},
-                "serverInfo": {"name": "acg-crash-intel", "version": "1.0.0"}
-            }
-        })
-
-    elif msg.get('method') == 'tools/list':
-        # Tools list can go directly
-        return jsonify({"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS}})
-
-    elif msg.get('method') == 'tools/call':
-        name = msg['params']['name']
-        args = msg['params'].get('arguments', {})
-        try:
-            result = execute_tool(name, args)
-            response_msg = {
-                "jsonrpc": "2.0", "id": msg_id,
-                "result": {"content": [{"type": "text", "text": json.dumps(result, indent=2, default=str)}]}
-            }
-            # Send through SSE if session exists
-            if session_id in sessions:
-                sessions[session_id].put(response_msg)
-                return jsonify({"jsonrpc": "2.0", "id": msg_id, "result": {}})
-            else:
-                return jsonify(response_msg)
-        except Exception as e:
-            error_msg = {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32603, "message": str(e)}}
-            if session_id in sessions:
-                sessions[session_id].put(error_msg)
-            return jsonify(error_msg)
-
-    elif msg.get('method') == 'notifications/initialized':
-        return jsonify({"jsonrpc": "2.0", "id": msg_id, "result": {}})
-
-    return jsonify({"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32601, "message": "Method not found"}})
+    return sse()
 
 if __name__ == '__main__':
     port = int(sys.argv[2]) if '--port' in sys.argv else 5053
