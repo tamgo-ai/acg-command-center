@@ -110,6 +110,7 @@ export interface ChannelPerformance {
   drop_rate: number;
   avg_confidence: number;
   appointments: number;
+  total_calls: number;
   total_spend?: number;
   impressions?: number;
   clicks?: number;

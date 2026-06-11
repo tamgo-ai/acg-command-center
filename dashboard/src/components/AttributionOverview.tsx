@@ -91,6 +91,7 @@ export default function AttributionOverview({ days }: Props) {
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-medium capitalize" style={{ color: '#d0d0e0' }}>{ch.channel.replace(/_/g, ' ')}</span>
                     <span className="font-mono" style={{ color: '#8a8aa0' }}>
+                      {ch.total_calls > 0 && <span style={{color:'#6a6a80'}}>📞{ch.total_calls} → </span>}
                       {ch.journeys} leads · {ch.drop_offs} drops ·
                       <span style={{ color: ch.drop_rate > 35 ? '#10b981' : ch.drop_rate > 15 ? '#f59e0b' : '#ef4444' }}> {ch.drop_rate}%</span>
                     </span>

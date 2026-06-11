@@ -214,7 +214,16 @@ app.get('/api/trends', (req, res) => {
     SELECT strftime('%Y-%m', date) as month, channel, SUM(spend) as spend
     FROM ad_spend GROUP BY month, channel ORDER BY month
   `).all();
-  res.json({ byChannel, dailyTotal, weekly, dropsMonthly, spendMonthly });
+  // Journeys by channel (from customer_journey — the attribution truth)
+  const journeysByChannel = db.prepare(`
+    SELECT date(last_touch_at) as day, attributed_channel as channel,
+           COUNT(*) as journeys,
+           SUM(CASE WHEN drop_off = 1 THEN 1 ELSE 0 END) as drops
+    FROM customer_journey
+    WHERE attributed_channel IS NOT NULL AND last_touch_at > ${since}
+    GROUP BY day, attributed_channel ORDER BY day
+  `).all();
+  res.json({ byChannel, dailyTotal, weekly, dropsMonthly, spendMonthly, journeysByChannel });
 });
 
 // ── GET /api/calls/recent — Últimas llamadas ──────────────────────
@@ -543,11 +552,20 @@ app.get('/api/attribution/channels', (req, res) => {
   `).all() as any[];
   const spendMap = new Map(spendByChannel.map((s: any) => [s.channel, s]));
 
+  // Raw calls per channel (from number_registry — the telephony truth)
+  const callsByChannel = db.prepare(`
+    SELECT nr.channel, COUNT(*) as total_calls
+    FROM calls c JOIN number_registry nr ON c.to_number = nr.twilio_number
+    WHERE c.occurred_at > ${since} AND c.direction = 'inbound'
+    GROUP BY nr.channel
+  `).all() as any[];
+  const callsMap = new Map(callsByChannel.map((c: any) => [c.channel, c.total_calls]));
+
   const enriched = channels.map((ch: any) => {
     const sp = spendMap.get(ch.channel) || {};
     const cpl = ch.journeys > 0 ? ((sp.total_spend || 0) / ch.journeys) : 0;
     const cpd = ch.drop_offs > 0 ? ((sp.total_spend || 0) / ch.drop_offs) : 0;
-    return { ...ch, ...sp, cost_per_lead: Math.round(cpl), cost_per_drop: Math.round(cpd) };
+    return { ...ch, ...sp, total_calls: callsMap.get(ch.channel) || 0, cost_per_lead: Math.round(cpl), cost_per_drop: Math.round(cpd) };
   });
 
   res.json(enriched);
