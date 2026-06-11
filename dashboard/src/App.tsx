@@ -6,6 +6,7 @@ import { Funnel } from './components/Funnel';
 import { Trends } from './components/Trends';
 import { Sidebar } from './components/Sidebar';
 import { LegalAIView } from './components/LegalAIView';
+import AttributionOverview from './components/AttributionOverview';
 import { api, type Recommendation, type Location } from './api';
 
 export interface LocationChannelStat {
@@ -21,7 +22,7 @@ export interface LocationChannelStat {
   conversion_rate: number | null;
 }
 
-type View = 'feed' | 'heatmap' | 'funnel' | 'trends' | 'crashintel' | 'legalai';
+type View = 'feed' | 'attribution' | 'heatmap' | 'funnel' | 'trends' | 'crashintel' | 'legalai';
 type Period = { label: string; days: number };
 
 const PERIODS: Period[] = [
@@ -155,6 +156,9 @@ function App() {
             <div className="animate-fade-in space-y-6">
               {activeView === 'feed' && (
                 <RecommendationFeed recommendations={recommendations} onStatusChange={handleStatusChange} />
+              )}
+              {activeView === 'attribution' && (
+                <AttributionOverview days={period.days} />
               )}
               {activeView === 'heatmap' && (
                 <Heatmap stats={stats} locations={locations} />

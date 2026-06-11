@@ -1,14 +1,15 @@
-import { MessageSquareWarning, Grid3X3, FunnelIcon, TrendingUp, Activity, CarFront, Shield } from 'lucide-react';
+import { MessageSquareWarning, Grid3X3, FunnelIcon, TrendingUp, Activity, CarFront, Shield, BarChart3 } from 'lucide-react';
 import { DataUpload } from './DataUpload';
 
 interface SidebarProps {
-  activeView: 'feed' | 'heatmap' | 'funnel' | 'trends' | 'crashintel' | 'legalai';
-  onNavigate: (view: 'feed' | 'heatmap' | 'funnel' | 'trends' | 'crashintel' | 'legalai') => void;
+  activeView: 'feed' | 'attribution' | 'heatmap' | 'funnel' | 'trends' | 'crashintel' | 'legalai';
+  onNavigate: (view: 'feed' | 'attribution' | 'heatmap' | 'funnel' | 'trends' | 'crashintel' | 'legalai') => void;
   onDataImported?: () => void;
 }
 
 const NAV_ITEMS = [
   { id: 'feed' as const, label: 'Intel', icon: MessageSquareWarning },
+  { id: 'attribution' as const, label: 'Atribución', icon: BarChart3 },
   { id: 'heatmap' as const, label: 'Mapa de Calor', icon: Grid3X3 },
   { id: 'funnel' as const, label: 'Embudo', icon: FunnelIcon },
   { id: 'trends' as const, label: 'Tendencias', icon: TrendingUp },

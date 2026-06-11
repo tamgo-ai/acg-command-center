@@ -469,6 +469,158 @@ app.get('/api/ad-spend', (req, res) => {
   res.json(spend);
 });
 
+// ── GET /api/attribution/overview ─────────────────────────────────
+app.get('/api/attribution/overview', (req, res) => {
+  const days = getDays(req);
+  const since = `datetime('now', '-${days} days')`;
+  const data = db.prepare(`
+    SELECT
+      COUNT(*) AS total_journeys,
+      COUNT(CASE WHEN attributed_channel IS NOT NULL THEN 1 END) AS attributed,
+      COUNT(DISTINCT customer_phone) AS unique_phones,
+      COUNT(DISTINCT attributed_channel) AS channels_detected,
+      COUNT(DISTINCT attributed_location) AS locations_detected,
+      ROUND(100.0 * SUM(CASE WHEN drop_off = 1 THEN 1 ELSE 0 END) / MAX(COUNT(*),1), 1) AS drop_rate,
+      ROUND(100.0 * COUNT(CASE WHEN attributed_channel IS NOT NULL THEN 1 END) / MAX(COUNT(*),1), 1) AS attribution_rate,
+      COALESCE(ROUND(AVG(CASE WHEN attributed_channel IS NOT NULL THEN confidence END), 2), 0) AS avg_confidence
+    FROM customer_journey
+    WHERE last_touch_at > ${since}
+  `).get() as any;
+
+  // Merge ad_spend for cost metrics
+  const spend = db.prepare(`SELECT COALESCE(SUM(spend),0) as total FROM ad_spend WHERE date >= date('now','-${days} days')`).get() as any;
+  const dropsTotal = db.prepare(`SELECT COUNT(*) as c FROM customer_journey WHERE drop_off=1 AND last_touch_at > ${since}`).get() as any;
+
+  res.json({
+    ...data,
+    total_spend: spend.total,
+    cost_per_drop: dropsTotal.c > 0 ? (spend.total / dropsTotal.c).toFixed(2) : 0,
+  });
+});
+
+// ── GET /api/attribution/channels ─────────────────────────────────
+app.get('/api/attribution/channels', (req, res) => {
+  const days = getDays(req);
+  const since = `datetime('now', '-${days} days')`;
+  const channels = db.prepare(`
+    SELECT
+      COALESCE(attributed_channel, 'unattributed') as channel,
+      COUNT(*) AS journeys,
+      SUM(CASE WHEN drop_off = 1 THEN 1 ELSE 0 END) AS drop_offs,
+      COUNT(DISTINCT customer_phone) AS unique_phones,
+      ROUND(100.0 * SUM(CASE WHEN drop_off = 1 THEN 1 ELSE 0 END) / MAX(COUNT(*),1), 1) AS drop_rate,
+      ROUND(AVG(confidence), 2) AS avg_confidence,
+      COUNT(DISTINCT appointment_id) AS appointments
+    FROM customer_journey
+    WHERE last_touch_at > ${since}
+    GROUP BY attributed_channel
+    HAVING journeys >= 3
+    ORDER BY journeys DESC
+  `).all() as any[];
+
+  // Merge spend per channel
+  const spendByChannel = db.prepare(`
+    SELECT channel, SUM(spend) as total_spend, SUM(impressions) as impressions, SUM(clicks) as clicks, SUM(conversions) as conversions
+    FROM ad_spend WHERE date >= date('now','-${days} days') GROUP BY channel
+  `).all() as any[];
+  const spendMap = new Map(spendByChannel.map((s: any) => [s.channel, s]));
+
+  const enriched = channels.map((ch: any) => {
+    const sp = spendMap.get(ch.channel) || {};
+    const cpl = ch.journeys > 0 ? ((sp.total_spend || 0) / ch.journeys) : 0;
+    const cpd = ch.drop_offs > 0 ? ((sp.total_spend || 0) / ch.drop_offs) : 0;
+    return { ...ch, ...sp, cost_per_lead: Math.round(cpl), cost_per_drop: Math.round(cpd) };
+  });
+
+  res.json(enriched);
+});
+
+// ── GET /api/attribution/locations ────────────────────────────────
+app.get('/api/attribution/locations', (req, res) => {
+  const days = getDays(req);
+  const since = `datetime('now', '-${days} days')`;
+  const locs = db.prepare(`
+    SELECT
+      cj.attributed_location as location_id,
+      l.name,
+      COUNT(*) AS journeys,
+      SUM(CASE WHEN cj.drop_off = 1 THEN 1 ELSE 0 END) AS drop_offs,
+      ROUND(100.0 * SUM(CASE WHEN cj.drop_off = 1 THEN 1 ELSE 0 END) / MAX(COUNT(*),1), 1) AS drop_rate,
+      COUNT(DISTINCT cj.attributed_channel) AS channels,
+      COUNT(DISTINCT cj.customer_phone) AS unique_phones
+    FROM customer_journey cj
+    LEFT JOIN locations l ON cj.attributed_location = l.location_id
+    WHERE cj.attributed_location IS NOT NULL AND cj.attributed_location != 'all'
+      AND cj.last_touch_at > ${since}
+    GROUP BY cj.attributed_location
+    HAVING journeys >= 5
+    ORDER BY journeys DESC
+  `).all() as any[];
+
+  // Merge calls and spend
+  const calls30d = db.prepare(`
+    SELECT nr.location_id, COUNT(*) as total_calls
+    FROM calls c JOIN number_registry nr ON c.to_number = nr.twilio_number
+    WHERE c.occurred_at > datetime('now','-${days} days') AND c.direction='inbound'
+    GROUP BY nr.location_id
+  `).all() as any[];
+  const callsMap = new Map(calls30d.map((c: any) => [c.location_id, c.total_calls]));
+
+  const spend = db.prepare(`SELECT location_id, SUM(spend) as total_spend FROM ad_spend WHERE date >= date('now','-${days} days') GROUP BY location_id`).all() as any[];
+  const spendMap = new Map(spend.map((s: any) => [s.location_id, s.total_spend]));
+
+  const enriched = locs.map((loc: any) => ({
+    ...loc,
+    total_calls: callsMap.get(loc.location_id) || 0,
+    total_spend: spendMap.get(loc.location_id) || 0,
+    cost_per_drop: loc.drop_offs > 0 ? Math.round((spendMap.get(loc.location_id) || 0) / loc.drop_offs) : 0,
+  }));
+
+  res.json(enriched);
+});
+
+// ── GET /api/attribution/sources ──────────────────────────────────
+app.get('/api/attribution/sources', (req, res) => {
+  const days = getDays(req);
+  const since = `datetime('now', '-${days} days')`;
+  const sources = db.prepare(`
+    SELECT
+      CASE
+        WHEN attributed_channel IN ('manual','manual_dial','gohighlevel','conversations - manual entry') THEN 'Manual Entry'
+        WHEN attributed_channel IN ('call_center','twilio_voice','ai_voice_call','twilio_sms') THEN 'Call Center'
+        WHEN attributed_channel = 'lsa' THEN 'LSA'
+        WHEN attributed_channel = 'google_ads' THEN 'Google Ads'
+        WHEN attributed_channel IN ('gmb','public booking','website','gardena landing page','rancho cucamonga landing page') THEN 'Orgánico'
+        WHEN attributed_channel = 'facebook' THEN 'Social'
+        WHEN attributed_channel IN ('claim page intake','service funnel','liaison','walk_in','referral') THEN 'Otros'
+        ELSE 'Otros'
+      END AS source_group,
+      COUNT(*) AS count,
+      SUM(CASE WHEN drop_off=1 THEN 1 ELSE 0 END) as drop_offs,
+      ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM customer_journey WHERE attributed_channel IS NOT NULL AND last_touch_at > ${since}), 1) AS pct
+    FROM customer_journey
+    WHERE attributed_channel IS NOT NULL AND last_touch_at > ${since}
+    GROUP BY source_group
+    ORDER BY count DESC
+  `).all();
+
+  res.json(sources);
+});
+
+// ── GET /api/attribution/trends ───────────────────────────────────
+app.get('/api/attribution/trends', (req, res) => {
+  const days = getDays(req, 60);
+  const since = `datetime('now', '-${days} days')`;
+  const daily = db.prepare(`
+    SELECT date(last_touch_at) as day, attributed_channel as channel,
+      COUNT(*) AS journeys, SUM(CASE WHEN drop_off=1 THEN 1 ELSE 0 END) AS drop_offs
+    FROM customer_journey
+    WHERE attributed_channel IS NOT NULL AND last_touch_at > ${since}
+    GROUP BY day, channel ORDER BY day
+  `).all();
+  res.json({ daily });
+});
+
 // ── Legal AI — Knowledge Base + Chat ───────────────────────────
 import { legalAiRoutes } from './legal-ai';
 app.use('/api/legal-ai', legalAiRoutes);

@@ -89,6 +89,59 @@ export interface Recommendation {
   status: 'new' | 'reviewed' | 'actioned' | 'dismissed';
 }
 
+export interface AttributionOverview {
+  total_journeys: number;
+  attributed: number;
+  unique_phones: number;
+  channels_detected: number;
+  locations_detected: number;
+  drop_rate: number;
+  attribution_rate: number;
+  avg_confidence: number;
+  total_spend: number;
+  cost_per_drop: string;
+}
+
+export interface ChannelPerformance {
+  channel: string;
+  journeys: number;
+  drop_offs: number;
+  unique_phones: number;
+  drop_rate: number;
+  avg_confidence: number;
+  appointments: number;
+  total_spend?: number;
+  impressions?: number;
+  clicks?: number;
+  conversions?: number;
+  cost_per_lead: number;
+  cost_per_drop: number;
+}
+
+export interface LocationLeader {
+  location_id: string;
+  name: string;
+  journeys: number;
+  drop_offs: number;
+  drop_rate: number;
+  channels: number;
+  unique_phones: number;
+  total_calls: number;
+  total_spend: number;
+  cost_per_drop: number;
+}
+
+export interface SourceGroup {
+  source_group: string;
+  count: number;
+  drop_offs: number;
+  pct: number;
+}
+
+export interface AttributionTrends {
+  daily: Array<{ day: string; channel: string; journeys: number; drop_offs: number }>;
+}
+
 // ── API ─────────────────────────────────────────────────────────
 export const api = {
   async getStats(): Promise<Stats> {
@@ -259,6 +312,27 @@ export const api = {
       .eq('active', true);
 
     return data || [];
+  },
+
+  async getAttributionOverview(days = 90): Promise<AttributionOverview> {
+    if (isLocal) return fetchLocal(`/api/attribution/overview?days=${days}`);
+    return fetchLocal(`/api/attribution/overview?days=${days}`);
+  },
+  async getChannelPerformance(days = 90): Promise<ChannelPerformance[]> {
+    if (isLocal) return fetchLocal(`/api/attribution/channels?days=${days}`);
+    return fetchLocal(`/api/attribution/channels?days=${days}`);
+  },
+  async getLocationLeaderboard(days = 90): Promise<LocationLeader[]> {
+    if (isLocal) return fetchLocal(`/api/attribution/locations?days=${days}`);
+    return fetchLocal(`/api/attribution/locations?days=${days}`);
+  },
+  async getAttributionSources(days = 90): Promise<SourceGroup[]> {
+    if (isLocal) return fetchLocal(`/api/attribution/sources?days=${days}`);
+    return fetchLocal(`/api/attribution/sources?days=${days}`);
+  },
+  async getAttributionTrends(days = 60): Promise<AttributionTrends> {
+    if (isLocal) return fetchLocal(`/api/attribution/trends?days=${days}`);
+    return fetchLocal(`/api/attribution/trends?days=${days}`);
   },
 
   isLocal: () => isLocal,

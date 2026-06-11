@@ -1746,10 +1746,24 @@ def api_revenue_radar():
         """, [loc['name']]).fetchall()
         competitors[loc['name']] = [dict(c) for c in comps]
 
-    # Get reputation
+    # Get reputation + competitor ratings
     reputation = {}
     for row in conn.execute("SELECT * FROM acg_reputation").fetchall():
         reputation[row['acg_name']] = dict(row)
+
+    # Get competitor ratings per ACG
+    comp_ratings = {}
+    for row in conn.execute("""
+        SELECT acg_name, AVG(competitor_rating) as avg_comp_rating,
+               MAX(competitor_rating) as best_comp_rating,
+               COUNT(*) as comp_count
+        FROM acg_competitor_distances GROUP BY acg_name
+    """).fetchall():
+        comp_ratings[row['acg_name']] = {
+            'avg_rating': round(row['avg_comp_rating'], 1) if row['avg_comp_rating'] else 4.0,
+            'best_rating': round(row['best_comp_rating'], 1) if row['best_comp_rating'] else 4.0,
+            'count': row['comp_count']
+        }
 
     # Get insurer distribution (top 5 in CA, distributed by crash volume)
     insurers = conn.execute("""
@@ -1778,10 +1792,27 @@ def api_revenue_radar():
         # Competitor score (0-100): more competitors nearby = higher competition
         comp_score = min(100, len(comp_list) * 20 + sum(10 for c in nearest if c['distance_miles'] < 3))
 
-        # Reputation score (0-100)
+        # Reputation score (0-100) — Bayesian weighted: rating × volume
         gr = rep.get('google_rating', 4.0) or 4.0
         gv = rep.get('google_reviews', 0) or 0
-        rep_score = min(100, gr * 18 + gv * 0.1)  # 4.5★ + 100 reviews = 91
+        cr = comp_ratings.get(name, {})
+        competitor_avg = cr.get('avg_rating', 4.0)
+        competitor_best = cr.get('best_rating', 4.0)
+
+        # Bayesian weighted rating: (R×v + C×m) / (v+m)
+        # R = ACG rating, v = ACG reviews, C = global avg (3.9 for body shops), m = 50 minimum credibility
+        C = 3.9  # Global average body shop rating
+        m = 50   # Minimum reviews for credibility
+        bayesian_acg = round((gr * gv + C * m) / (gv + m), 2)
+
+        # Same for competitor average
+        comp_reviews_est = 100  # Estimated avg reviews for competitors
+        bayesian_comp = round((competitor_avg * comp_reviews_est + C * m) / (comp_reviews_est + m), 2)
+
+        # Score: 50% rating vs competitors + 25% review volume + 25% Bayesian advantage
+        rating_advantage = (bayesian_acg - bayesian_comp) * 30  # Each 0.1 Bayesian point = +3 score points
+        volume_score = min(30, gv / 10)  # 300+ reviews = 30 pts
+        rep_score = min(100, max(10, 40 + rating_advantage + volume_score))
 
         # Fleet at risk (luxury vehicles near this ACG, 10mi radius)
         lat_r = 10 / 69.0
@@ -1833,7 +1864,17 @@ def api_revenue_radar():
             'competitors_nearby': len(comp_list),
             'nearest_competitors': nearest_names,
             'competitor_score': comp_score,
-            'reputation': {'google_rating': gr, 'google_reviews': gv, 'score': round(rep_score)},
+            'reputation': {
+                'google_rating': gr, 'google_reviews': gv,
+                'bayesian_rating': bayesian_acg,  # Weighted for review count
+                'bayesian_competitor': bayesian_comp,
+                'score': round(rep_score),
+                'competitor_avg_rating': competitor_avg,
+                'competitor_best_rating': competitor_best,
+                'gap_vs_competitors': round(bayesian_acg - bayesian_comp, 2),
+                'credibility': 'HIGH' if gv > 200 else ('MEDIUM' if gv > 50 else 'LOW'),
+                'status_vs_competitors': 'ABOVE' if bayesian_acg > bayesian_comp + 0.03 else ('BELOW' if bayesian_acg < bayesian_comp - 0.03 else 'TIED'),
+            },
             'insurer_flow': insurer_flow[:5],
             'opportunity_score': opportunity_score,
             'score_breakdown': {

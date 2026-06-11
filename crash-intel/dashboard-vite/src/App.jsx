@@ -1976,7 +1976,9 @@ function RevenueRadar() {
                 </td>
                 <td className="py-2.5 px-2 text-center">
                   <div className="text-white">{r.reputation.google_rating}★</div>
-                  <div className="text-[8px] text-slate-500">{r.reputation.google_reviews} reviews</div>
+                  <div className={`text-[8px] ${r.reputation.gap_vs_competitors >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {r.reputation.gap_vs_competitors >= 0 ? '↑' : '↓'} vs {r.reputation.competitor_avg_rating}★
+                  </div>
                 </td>
                 <td className="py-2.5 px-2 text-center">
                   <div className="text-[9px] text-slate-300">{r.insurer_flow?.[0]?.company}</div>
@@ -2022,14 +2024,35 @@ function RevenueRadar() {
 
         {/* Reputation */}
         <div className="rounded-xl border border-blue-500/10 bg-blue-500/[0.03] p-4">
-          <h4 className="text-[10px] font-semibold text-blue-400 uppercase mb-2">⭐ Reputation</h4>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-white">{selectedLoc.reputation.google_rating}★</div>
-            <div className="text-[10px] text-slate-500 mt-1">{selectedLoc.reputation.google_reviews} Google reviews</div>
+          <h4 className="text-[10px] font-semibold text-blue-400 uppercase mb-2">⭐ Reputation vs Competitors</h4>
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div>
+              <div className="text-2xl font-bold text-white">{selectedLoc.reputation.google_rating}★</div>
+              <div className="text-[8px] text-slate-500 mt-0.5">ACG ({selectedLoc.reputation.google_reviews} reviews)</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-400">{selectedLoc.reputation.competitor_avg_rating}★</div>
+              <div className="text-[8px] text-slate-500 mt-0.5">Competitor Avg</div>
+            </div>
           </div>
           <div className="mt-3 space-y-1 text-[10px]">
-            <div className="flex justify-between"><span className="text-slate-500">Reputation Score</span><span className="text-white font-bold">{selectedLoc.reputation.score}/100</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Gap to 4.8★</span><span className="text-amber-400">+{Math.max(0, Math.round((4.8 - selectedLoc.reputation.google_rating) * 25))} reviews needed</span></div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Gap vs Competitors</span>
+              <span className={`font-bold ${
+                selectedLoc.reputation.status_vs_competitors === 'ABOVE' ? 'text-emerald-400' :
+                selectedLoc.reputation.status_vs_competitors === 'BELOW' ? 'text-red-400' : 'text-amber-400'
+              }`}>
+                {selectedLoc.reputation.gap_vs_competitors > 0 ? '+' : ''}{selectedLoc.reputation.gap_vs_competitors.toFixed(1)}★
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Best Competitor</span>
+              <span className="text-slate-300 font-bold">{selectedLoc.reputation.competitor_best_rating}★</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Reputation Score</span>
+              <span className="text-white font-bold">{selectedLoc.reputation.score}/100</span>
+            </div>
           </div>
         </div>
 
